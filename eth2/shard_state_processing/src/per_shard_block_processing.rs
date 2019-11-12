@@ -1,5 +1,8 @@
 use crate::*;
+use arrayref::array_ref;
 use errors::Error;
+use ewasm::{Execute, Runtime};
+use std::fs::File;
 use types::*;
 
 pub mod errors;
@@ -11,6 +14,7 @@ pub fn per_shard_block_processing<T: ShardSpec, U: EthSpec>(
     spec: &ChainSpec,
 ) -> Result<(), Error> {
     process_shard_block_header(beacon_state, state, block, spec);
+    process_shard_block_body(state, block);
     // process_shard_attestations(state, beacon_state, block);
     // process_shard_block_data_fees(state, beacon_state, block);
     Ok(())
@@ -126,4 +130,45 @@ pub fn process_shard_block_data_fees<T: ShardSpec, U: EthSpec>(
     // state.basefee = Gwei();
 
     Ok(())
+}
+
+pub fn process_shard_block_body<T: ShardSpec>(
+    state: &mut ShardState<T>,
+    block: &ShardBlock,
+) -> Result<(), Error> {
+    // For now, we're hard coding in our EE and it's initial state root.
+    let code = load_file("eth2/shard_state_processing/execution_environments/sheth.wasm");
+    if state.exec_env_states.len() == 0 {
+        let root = hex::decode("66cb173971c14df7f28bcb64e37d70c636db6a9a3ce36988359e05534f578052")
+            .unwrap();
+        state.exec_env_states.push(Hash256::from_slice(&root));
+    }
+    // ---------------------
+
+    if block.body.len() == 0 {
+        return Ok(());
+    }
+
+    let mut runtime = Runtime::new(
+        &code,
+        &block.body,
+        *array_ref![state.exec_env_states[0].as_bytes(), 0, 32],
+    );
+
+    state.exec_env_states[0] = Hash256::from_slice(&runtime.execute());
+
+    println!(
+        "*** NEW EE ROOT: {} ***",
+        hex::encode(state.exec_env_states[0])
+    );
+
+    Ok(())
+}
+
+fn load_file(filename: &str) -> Vec<u8> {
+    use std::io::prelude::*;
+    let mut file = File::open(filename).expect("loading file failed");
+    let mut buf = Vec::new();
+    file.read_to_end(&mut buf).expect("reading file failed");
+    buf
 }

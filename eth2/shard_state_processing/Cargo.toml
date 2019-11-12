@@ -5,6 +5,9 @@ authors = ["Will Villanueva", "Wil Barnes"]
 edition = "2018"
 
 [dependencies]
+arrayref = "0.3.5"
+ewasm = "0.1.0"
+hex = "0.4.0"
 tree_hash = { path = "../utils/tree_hash" }
 types = { path = "../types" }
 
